@@ -1,0 +1,6 @@
+*.pcapng
+*.cap
+*.pcap
+
+pcap-convert
+*.o
