@@ -9,6 +9,7 @@
 #include "PcapFileDevice.h"
 #include "ProtocolType.h"
 #include "IPv4Layer.h"
+#include "getopt.h"
 
 std::string getProtocolTypeAsString(pcpp::ProtocolType protocolType)
 {
@@ -31,8 +32,114 @@ std::string getProtocolTypeAsString(pcpp::ProtocolType protocolType)
     }
 }
 
+void printUsage()
+{
+    std::cout
+        << "-i              : Path of the input pcap file" << std::endl
+        << "-o              : Path of the output pcap file" << std::endl
+        << "--vlan          : VLAN ID (e.g 10000)" << std::endl
+        << "--ip-version    : Version of IP either e.g IPv4 or IPv6" << std::endl
+        << "--ttl           : Decrease ttl for TCP packets (e.g 60)" << std::endl
+        << "--dns-addr      : DNS Address with this value, if UDP+DNS Packet (e.g www.anuvu.com)" << std::endl
+        << "--dns-port      : DNS Port to be replaced by this value, if UDP+DNS Packet (e.g 4500)" << std::endl
+        << std::endl;
+}
+
+// static struct option PcapConvertOptions[] = {
+//     {"input-file", required_argument, NULL, 'i'},
+//     {"output-file", required_argument, NULL, 'o'},
+//     {"vlan", optional_argument, NULL, 'V'},
+//     {"ip-version", optional_argument, NULL, 'I'},
+//     {"help", no_argument, NULL, 'h'},
+//     {0, 0, 0, 0}
+//     // {"", optional_argument, 0, ''},
+// };
+
+int num = -1;
+bool is_beep = false;
+float sigma = 2.034;
+std::string write_file = "default_file.txt";
+std::string inputFile = "in_file.pcap";
+std::string outputFile = "out_file.pcap";
+std::string ipVersion = "IPv4";
+std::string dnsAddress = "";
+int vlanId = 0;
+int ttl = 0;
+int dnsPort = 0;
+
+void ProcessArgs(int argc, char **argv)
+{
+    const char *const short_opts = "i:o:V:tdpIh";
+    const option long_opts[] = {
+        {"input-file", required_argument, nullptr, 'i'},
+        {"output-file", required_argument, nullptr, 'o'},
+        {"vlan", required_argument, nullptr, 'V'},
+        {"ip-version", required_argument, nullptr, 'I'},
+        {"ttl", required_argument, nullptr, 't'},
+        {"dns-addr", required_argument, nullptr, 'd'},
+        {"dns-port", required_argument, nullptr, 'p'},
+        {"help", no_argument, nullptr, 'h'},
+        {0, 0, 0, 0}
+        // {"", optional_argument, 0, ''},
+    };
+
+    while (true)
+    {
+        const auto opt = getopt_long(argc, argv, short_opts, long_opts, nullptr);
+
+        if (-1 == opt)
+            break;
+
+        switch (opt)
+        {
+        case 'i':
+            inputFile = std::string(optarg);
+            std::cout << "Input file set to: " << inputFile << std::endl;
+            break;
+
+        case 'o':
+            outputFile = std::string(optarg);
+            std::cout << "Input file set to: " << outputFile << std::endl;
+            break;
+
+        case 'V':
+            vlanId = std::stoi(optarg);
+            std::cout << "VLAN ID set to: " << vlanId << std::endl;
+            break;
+
+        case 'I':
+            ipVersion = std::string(optarg);
+            std::cout << "IP Version set to: " << ipVersion << std::endl;
+            break;
+
+        case 't':
+            ttl = std::stoi(optarg);
+            std::cout << "TTL set to:" << ttl << std::endl;
+            break;
+
+        case 'd':
+            dnsAddress = std::string(optarg);
+            std::cout << "DNS Address set to: " << dnsAddress << std::endl;
+            break;
+
+        case 'p':
+            dnsPort = std::stoi(optarg);
+            std::cout << "DNS Port set to: " << dnsPort << std::endl;
+            break;
+
+        case 'h': // -h or --help
+        case '?': // Unrecognized option
+        default:
+            printUsage();
+            break;
+        }
+    }
+}
+
 int main(int argc, char *argv[])
 {
+    ProcessArgs(argc, argv);
+    exit(2);
 
     pcpp::IFileReaderDevice *reader = pcpp::IFileReaderDevice::getReader("QinQ.pcap.cap");
     // pcpp::IFileReaderDevice *reader = pcpp::IFileReaderDevice::getReader("dns_tcp.pcapng");
@@ -45,7 +152,6 @@ int main(int argc, char *argv[])
 
     int packets = 0;
     pcpp::RawPacket rawPacket;
-
 
     while (reader->getNextPacket(rawPacket))
     {

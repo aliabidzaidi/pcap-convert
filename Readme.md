@@ -38,3 +38,17 @@ fields must be replaced by --dns-addr and --dns-port options
 - Output pcap file should be valid and readable in Wireshark without displaying errors of any kind
 
 
+
+
+## Build and Run
+
+```
+make clean  # Clean
+make        # Build
+
+
+# Run with all options
+./pcap-convert -i asdf -o asdf --vlan 1000 --ip-version IPv4 --dns-addr www.anuvu.com --dns-port 4500 --ttl 60
+
+```
+
