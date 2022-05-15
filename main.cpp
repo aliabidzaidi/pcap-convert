@@ -10,6 +10,7 @@
 #include "ProtocolType.h"
 #include "IPv4Layer.h"
 #include "getopt.h"
+#include "DnsLayer.h"
 
 std::string getProtocolTypeAsString(pcpp::ProtocolType protocolType)
 {
@@ -45,16 +46,6 @@ void printUsage()
         << std::endl;
 }
 
-// static struct option PcapConvertOptions[] = {
-//     {"input-file", required_argument, NULL, 'i'},
-//     {"output-file", required_argument, NULL, 'o'},
-//     {"vlan", optional_argument, NULL, 'V'},
-//     {"ip-version", optional_argument, NULL, 'I'},
-//     {"help", no_argument, NULL, 'h'},
-//     {0, 0, 0, 0}
-//     // {"", optional_argument, 0, ''},
-// };
-
 int num = -1;
 bool is_beep = false;
 float sigma = 2.034;
@@ -63,7 +54,7 @@ std::string inputFile = "in_file.pcap";
 std::string outputFile = "out_file.pcap";
 std::string ipVersion = "IPv4";
 std::string dnsAddress = "";
-int vlanId = 0;
+uint16_t vlanId = 0;
 int ttl = 0;
 int dnsPort = 0;
 
@@ -139,14 +130,22 @@ void ProcessArgs(int argc, char **argv)
 int main(int argc, char *argv[])
 {
     ProcessArgs(argc, argv);
-    exit(2);
+
+    // TODO: Add inputFile and outputFile name
 
     pcpp::IFileReaderDevice *reader = pcpp::IFileReaderDevice::getReader("QinQ.pcap.cap");
     // pcpp::IFileReaderDevice *reader = pcpp::IFileReaderDevice::getReader("dns_tcp.pcapng");
+    pcpp::PcapFileWriterDevice pcapWriter("output.pcap", pcpp::LINKTYPE_ETHERNET);
+
 
     if (reader == NULL || !reader->open())
     {
         std::cerr << "Error in Reading file" << std::endl;
+        return 1;
+    }
+
+    if (!pcapWriter.open()){
+        std::cerr << "Error opening output pcap file" << std::endl;
         return 1;
     }
 
@@ -196,6 +195,9 @@ int main(int argc, char *argv[])
         }
 
         std::cout << "Vlan ID " << vlanLayer->getVlanID() << std::endl;
+        
+        vlanLayer->setVlanID(vlanId);
+
 
         // Layer 3
         // if packet ip version != argsIPVersion drop
@@ -209,6 +211,9 @@ int main(int argc, char *argv[])
                       << std::endl;
             continue;
         }
+
+        if (ttl != 0)
+            ipv4Layer->getIPv4Header()->timeToLive = ttl;
 
         std::cout
             << "Src  IP: " << ipv4Layer->getSrcIPAddress() << std::endl
@@ -232,16 +237,39 @@ int main(int argc, char *argv[])
         if (parsedPacket.isPacketOfType(pcpp::UDP) && parsedPacket.isPacketOfType(pcpp::DNS))
         {
             // Then packet craft serverAddress & port replace by args fields
+            pcpp::DnsLayer *dnsLayer = parsedPacket.getLayerOfType<pcpp::DnsLayer>();
+
+            if (dnsAddress != "")
+            {
+                dnsLayer->addQuery(dnsAddress, pcpp::DNS_TYPE_A, pcpp::DNS_CLASS_IN);
+            }
         }
 
         std::cout << "-----------------------------------------------\n"
                   << std::endl;
+
+
+        pcapWriter.writePacket(rawPacket);
     }
 
+    
+    pcpp::IPcapDevice::PcapStats stats;
+
+    reader->getStatistics(stats);
+    std::cout << "Read " << stats.packetsRecv << " packets successfully and " << stats.packetsDrop << " packets could not be read" << std::endl;
+
+    // read stats from pcap writer and print them
+    pcapWriter.getStatistics(stats);
+    std::cout << "Written " << stats.packetsRecv << " packets successfully to pcap writer and " << stats.packetsDrop << " packets could not be written" << std::endl;
+
+
     reader->close();
+    pcapWriter.close();
 
     std::cout
         << "File Read Successfully "
         << "PacketCount = " << packets
         << std::endl;
+
+    delete reader;
 }
