@@ -11,6 +11,7 @@
 #include "IPv4Layer.h"
 #include "getopt.h"
 #include "DnsLayer.h"
+#include "UdpLayer.h"
 
 std::string getProtocolTypeAsString(pcpp::ProtocolType protocolType)
 {
@@ -133,9 +134,8 @@ int main(int argc, char *argv[])
 
     // TODO: Add inputFile and outputFile name
 
-    pcpp::IFileReaderDevice *reader = pcpp::IFileReaderDevice::getReader("QinQ.pcap.cap");
-    // pcpp::IFileReaderDevice *reader = pcpp::IFileReaderDevice::getReader("dns_tcp.pcapng");
-    pcpp::PcapFileWriterDevice pcapWriter("output.pcap", pcpp::LINKTYPE_ETHERNET);
+    pcpp::IFileReaderDevice *reader = pcpp::IFileReaderDevice::getReader(inputFile);
+    pcpp::PcapFileWriterDevice pcapWriter(outputFile, pcpp::LINKTYPE_ETHERNET);
 
 
     if (reader == NULL || !reader->open())
@@ -212,6 +212,12 @@ int main(int argc, char *argv[])
             continue;
         }
 
+        if(ipv4Layer->getIPv4Header()->timeToLive < ttl)
+        {
+            std::cerr << "Time to live for packet is less than argument" << std::endl;
+            continue;
+        }
+
         if (ttl != 0)
             ipv4Layer->getIPv4Header()->timeToLive = ttl;
 
@@ -236,6 +242,9 @@ int main(int argc, char *argv[])
         // If L4 = UDP && DNS
         if (parsedPacket.isPacketOfType(pcpp::UDP) && parsedPacket.isPacketOfType(pcpp::DNS))
         {
+            pcpp::UdpLayer *udpLayer = parsedPacket.getLayerOfType<pcpp::UdpLayer>();
+            udpLayer->getUdpHeader()->portDst = dnsPort;
+
             // Then packet craft serverAddress & port replace by args fields
             pcpp::DnsLayer *dnsLayer = parsedPacket.getLayerOfType<pcpp::DnsLayer>();
 
