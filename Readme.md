@@ -50,5 +50,25 @@ make        # Build
 # Run with all options
 ./pcap-convert -i asdf -o asdf --vlan 1000 --ip-version IPv4 --dns-addr www.anuvu.com --dns-port 4500 --ttl 60
 
+# Least options
+./pcap-convert -i 802_1ad.pcapng.cap -o output1.pcap
+
+./pcap-convert -i ultimate-pcap.pcapng -o outputx.cap --vlan 121 --ip-version IPv4 --dns-addr anuvu.com --dns-port 53 --ttl 120
+
+# Output: 
+Read 36372 packets successfully and 0 packets could not be read
+Written 433 packets successfully to pcap writer and 0 packets could not be written
+
 ```
 
+
+
+```
+valgrind --leak-check=full \
+         --show-leak-kinds=all \
+         --track-origins=yes \
+         --verbose \
+         --log-file=pcap-convert-out.txt \
+         --ip-version IPv4 --dns-addr www.anuvu.com --dns-port 5353 --ttl 60
+
+```

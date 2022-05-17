@@ -9,9 +9,11 @@
 #include "PcapFileDevice.h"
 #include "ProtocolType.h"
 #include "IPv4Layer.h"
+#include "IPv6Layer.h"
 #include "getopt.h"
 #include "DnsLayer.h"
 #include "UdpLayer.h"
+#include "DnsResource.h"
 
 std::string getProtocolTypeAsString(pcpp::ProtocolType protocolType)
 {
@@ -56,8 +58,8 @@ std::string outputFile = "out_file.pcap";
 std::string ipVersion = "IPv4";
 std::string dnsAddress = "";
 uint16_t vlanId = 0;
-int ttl = 0;
-int dnsPort = 0;
+uint8_t ttl = 0;
+uint16_t dnsPort = 0;
 
 void ProcessArgs(int argc, char **argv)
 {
@@ -106,7 +108,7 @@ void ProcessArgs(int argc, char **argv)
 
         case 't':
             ttl = std::stoi(optarg);
-            std::cout << "TTL set to:" << ttl << std::endl;
+            std::cout << "TTL set to: " << (int)ttl << std::endl;
             break;
 
         case 'd':
@@ -128,6 +130,22 @@ void ProcessArgs(int argc, char **argv)
     }
 }
 
+// TODO: Parse functions
+bool parseEthernetLayer(pcpp::EthLayer &ethernetLayer)
+{
+    return false;
+}
+
+bool parseVlanLayer(pcpp::VlanLayer &vlanLayer)
+{
+    return false;
+}
+
+// TODO: parse the rest of the layers in functions 
+    // IPv4 
+    // IPv6 
+    // UDP+DNS
+
 int main(int argc, char *argv[])
 {
     ProcessArgs(argc, argv);
@@ -135,8 +153,8 @@ int main(int argc, char *argv[])
     // TODO: Add inputFile and outputFile name
 
     pcpp::IFileReaderDevice *reader = pcpp::IFileReaderDevice::getReader(inputFile);
-    pcpp::PcapFileWriterDevice pcapWriter(outputFile, pcpp::LINKTYPE_ETHERNET);
-
+    // pcpp::PcapFileWriterDevice pcapWriter(outputFile, pcpp::LINKTYPE_ETHERNET);
+    pcpp::PcapFileWriterDevice pcapWriter(outputFile);
 
     if (reader == NULL || !reader->open())
     {
@@ -144,10 +162,13 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    if (!pcapWriter.open()){
+    if (!pcapWriter.open())
+    {
         std::cerr << "Error opening output pcap file" << std::endl;
         return 1;
     }
+
+    pcapWriter.open();
 
     int packets = 0;
     pcpp::RawPacket rawPacket;
@@ -169,21 +190,22 @@ int main(int argc, char *argv[])
             continue;
         }
 
-        std::cout
-            << "Src  MAC address " << ethernetLayer->getSourceMac() << std::endl
-            << "Dest MAC address " << ethernetLayer->getDestMac() << std::endl
-            << "Ethernet type = 0x" << pcpp::netToHost16(ethernetLayer->getEthHeader()->etherType) << std::endl;
+
+        // std::cout
+        //     << "Src  MAC address " << ethernetLayer->getSourceMac() << std::endl
+        //     << "Dest MAC address " << ethernetLayer->getDestMac() << std::endl
+        //     << "Ethernet type = 0x" << pcpp::netToHost16(ethernetLayer->getEthHeader()->etherType) << std::endl;
 
         // bool hasVlan = parsedPacket.isPacketOfType<pcpp::VLAN>();
-        if (!parsedPacket.isPacketOfType(pcpp::VLAN))
-        {
-            std::cerr << "Doesn't contain a VLAN, pass!" << std::endl;
-            std::cout << "-----------------------------------------------\n"
-                      << std::endl;
-            continue;
-        }
+        // if (!parsedPacket.isPacketOfType(pcpp::VLAN))
+        // {
+        //     std::cerr << "Doesn't contain a VLAN, pass!" << std::endl;
+        //     std::cout << "-----------------------------------------------\n"
+        //               << std::endl;
+        //     continue;
+        // }
 
-        // Drop all packets except coming from vlanID
+        // // Drop all packets except coming from vlanID
 
         pcpp::VlanLayer *vlanLayer = parsedPacket.getLayerOfType<pcpp::VlanLayer>();
         if (vlanLayer == NULL)
@@ -194,74 +216,144 @@ int main(int argc, char *argv[])
             continue;
         }
 
-        std::cout << "Vlan ID " << vlanLayer->getVlanID() << std::endl;
-        
-        vlanLayer->setVlanID(vlanId);
-
+        // std::cout << "Vlan ID " << vlanLayer->getVlanID() << std::endl;
+        if(vlanLayer->getVlanID() != vlanId){
+            std::cerr << "Vlan ID is different expected: " << vlanId << ",  got: " << (int)vlanLayer->getVlanID() << std::endl;
+            std::cout << "-----------------------------------------------\n"
+                      << std::endl;
+            continue;
+        }
 
         // Layer 3
         // if packet ip version != argsIPVersion drop
 
-        pcpp::IPv4Layer *ipv4Layer = parsedPacket.getLayerOfType<pcpp::IPv4Layer>();
+        bool isIPv4 = parsedPacket.isPacketOfType(pcpp::IPv4);
+        bool isIPv6 = parsedPacket.isPacketOfType(pcpp::IPv6);
 
-        if (ipv4Layer == NULL)
+        std::cout << "IP Version v4: " << isIPv4 << std::endl;
+        std::cout << "IP Version v6: " << isIPv6 << std::endl;
+
+        // condition if packet is argsIpv6&packetIpv4 or argsIpv4&packetIpv6
+        // then pass
+        if ((ipVersion == "IPv4" && isIPv6) || (ipVersion == "IPv6" && isIPv4))
         {
-            std::cerr << "Ipv4 Layer is missing" << std::endl;
-            std::cout << "-----------------------------------------------\n"
-                      << std::endl;
+            std::cerr << "IP Layer pass because accepted: " << ipVersion << ", and packet type is: " << (isIPv4 ? "IPv4" : "IPv6") << std::endl;
             continue;
         }
 
-        if(ipv4Layer->getIPv4Header()->timeToLive < ttl)
+        if (isIPv4)
         {
-            std::cerr << "Time to live for packet is less than argument" << std::endl;
-            continue;
+            pcpp::IPv4Layer *ipv4Layer = parsedPacket.getLayerOfType<pcpp::IPv4Layer>();
+
+            if (ipv4Layer == NULL)
+            {
+                std::cerr << "Ipv4 Layer is missing" << std::endl;
+                std::cout << "-----------------------------------------------\n"
+                          << std::endl;
+                continue;
+            }
+
+            if (ipv4Layer->getIPv4Header()->timeToLive < ttl)
+            {
+                std::cerr << "Time to live for packet is less than argument" << std::endl;
+                continue;
+            }
+
+            if (ttl != 0)
+                ipv4Layer->getIPv4Header()->timeToLive = ttl;
+
+            // std::cout
+            //     << "Src  IP: " << ipv4Layer->getSrcIPAddress() << std::endl
+            //     << "Dest IP: " << ipv4Layer->getDstIPAddress() << std::endl
+            //     << "TTL: " << (int)ipv4Layer->getIPv4Header()->timeToLive << std::endl
+            //     << "IP Id: " << pcpp::netToHost16(ipv4Layer->getIPv4Header()->ipId) << std::endl;
+
+            // If L4 = ICMP Drop
+            // bool hasICMP = parsedPacket.isPacketOfType<pcpp::ICMP>();
+            if (parsedPacket.isPacketOfType(pcpp::ICMP))
+            {
+                std::cerr << "Is an ICMP Packet, pass!" << std::endl;
+                std::cout << "-----------------------------------------------\n"
+                        << std::endl;
+                continue;
+            }
         }
 
-        if (ttl != 0)
-            ipv4Layer->getIPv4Header()->timeToLive = ttl;
-
-        std::cout
-            << "Src  IP: " << ipv4Layer->getSrcIPAddress() << std::endl
-            << "Dest IP: " << ipv4Layer->getDstIPAddress() << std::endl
-            << "TTL: " << (int)ipv4Layer->getIPv4Header()->timeToLive << std::endl
-            << "IP Id: " << pcpp::netToHost16(ipv4Layer->getIPv4Header()->ipId) << std::endl;
-
-        // TODO: ALter TTL to 60
-
-        // If L4 = ICMP Drop
-        // bool hasICMP = parsedPacket.isPacketOfType<pcpp::ICMP>();
-        if (parsedPacket.isPacketOfType(pcpp::ICMP))
+        if (isIPv6)
         {
-            std::cerr << "Is an ICMP Packet, pass!" << std::endl;
-            std::cout << "-----------------------------------------------\n"
-                      << std::endl;
-            continue;
+            pcpp::IPv6Layer *ipv6Layer = parsedPacket.getLayerOfType<pcpp::IPv6Layer>();
+
+            if (ipv6Layer == NULL)
+            {
+                std::cerr << "Ipv6 Layer is missing" << std::endl;
+                std::cout << "-----------------------------------------------\n"
+                          << std::endl;
+                continue;
+            }
+
+            if (ipv6Layer->getIPv6Header()->hopLimit < ttl)
+            {
+                std::cerr << "Hop Limit for packet is less than argument" << std::endl;
+                continue;
+            }
+
+            if (ttl != 0)
+                ipv6Layer->getIPv6Header()->hopLimit = ttl;
+
+            // std::cout
+            //     << "Src  IP: " << ipv4Layer->getSrcIPAddress() << std::endl
+            //     << "Dest IP: " << ipv4Layer->getDstIPAddress() << std::endl
+            //     << "TTL: " << (int)ipv4Layer->getIPv4Header()->timeToLive << std::endl
+            //     << "IP Id: " << pcpp::netToHost16(ipv4Layer->getIPv4Header()->ipId) << std::endl;
+
+            // nextheader contains if icmpv6 or not
+            if (ipv6Layer->getIPv6Header()->nextHeader == pcpp::PACKETPP_IPPROTO_ICMPV6)
+            {
+                std::cerr << "Is an ICMP Packet, pass!" << std::endl;
+                std::cout << "-----------------------------------------------\n"
+                        << std::endl;
+                continue;
+            }
         }
 
-        // If L4 = UDP && DNS
+        
+
+        // // If L4 = UDP && DNS
         if (parsedPacket.isPacketOfType(pcpp::UDP) && parsedPacket.isPacketOfType(pcpp::DNS))
         {
             pcpp::UdpLayer *udpLayer = parsedPacket.getLayerOfType<pcpp::UdpLayer>();
-            udpLayer->getUdpHeader()->portDst = dnsPort;
 
-            // Then packet craft serverAddress & port replace by args fields
+            std::cout << "DNS Dst Port" << pcpp::netToHost16(udpLayer->getUdpHeader()->portDst) << std::endl;
+            std::cout << "DNS Src Port" << pcpp::netToHost16(udpLayer->getUdpHeader()->portSrc) << std::endl;
+
+            if (pcpp::DnsLayer::isDnsPort(pcpp::netToHost16(udpLayer->getUdpHeader()->portDst)))
+            {
+                udpLayer->getUdpHeader()->portDst = pcpp::hostToNet16(dnsPort);
+            }
+            else if (pcpp::DnsLayer::isDnsPort(pcpp::netToHost16(udpLayer->getUdpHeader()->portSrc)))
+            {
+                udpLayer->getUdpHeader()->portSrc = pcpp::hostToNet16(dnsPort);
+            }
+
             pcpp::DnsLayer *dnsLayer = parsedPacket.getLayerOfType<pcpp::DnsLayer>();
 
             if (dnsAddress != "")
             {
-                dnsLayer->addQuery(dnsAddress, pcpp::DNS_TYPE_A, pcpp::DNS_CLASS_IN);
+                pcpp::DnsQuery *dnsQuery = dnsLayer->getFirstQuery();
+                // dnsLayer->addQuery(dnsAddress, pcpp::DNS_TYPE_A, pcpp::DNS_CLASS_IN);
+                dnsQuery->setName(dnsAddress);
+
+                // std::cout <<"DNS Query type " << (int)dnsQuery->getType() << std::endl;
+                // std::cout <<"DNS query setName success = " << isSet  << std::endl;
             }
         }
 
         std::cout << "-----------------------------------------------\n"
                   << std::endl;
 
-
         pcapWriter.writePacket(rawPacket);
     }
 
-    
     pcpp::IPcapDevice::PcapStats stats;
 
     reader->getStatistics(stats);
@@ -270,7 +362,6 @@ int main(int argc, char *argv[])
     // read stats from pcap writer and print them
     pcapWriter.getStatistics(stats);
     std::cout << "Written " << stats.packetsRecv << " packets successfully to pcap writer and " << stats.packetsDrop << " packets could not be written" << std::endl;
-
 
     reader->close();
     pcapWriter.close();
